@@ -4,12 +4,13 @@ import pandas as pd
 from ast import literal_eval
 from collections import Counter
 
+
 def sampleFromDirichlet(alpha):
     return np.random.dirichlet(alpha)
 
 
 def sampleFromCategorical(theta):
-    theta = theta / np.sum(theta)
+    # theta = theta / np.sum(theta)
     return np.random.multinomial(1, theta).argmax()
 
 
@@ -96,18 +97,13 @@ class STMD_Gibbs_Sampler:
         #                 self.priorSentiment[i] = 0
 
         for d in range(numDocs):
-            if self.numSentence[d] >= self.maxSentence:
-                num_sentence = self.maxSentence
-            else:
-                num_sentence = self.numSentence[d]
-
             topicDistribution = sampleFromDirichlet(alphaVec)
             sentimentDistribution = np.zeros((self.numTopics, self.numSentiments))
 
             for t in range(self.numTopics):
                 sentimentDistribution[t, :] = sampleFromDirichlet(gammaVec)
 
-            for m in range(num_sentence):
+            for m in range(self.numSentence[d]):
                 t = sampleFromCategorical(topicDistribution)
                 s = sampleFromCategorical(sentimentDistribution[t, :])
                 self.topics[(d, m)] = t  # d 문서의 m번째 문장의 topic
@@ -149,29 +145,27 @@ class STMD_Gibbs_Sampler:
             if (iteration + 1) % 10 == 0:
                 print("Starting iteration %d of %d" % (iteration + 1, maxIters))
             for d in range(numDocs):
-                if self.numSentence[d] >= self.maxSentence:
-                    num_sentence = self.maxSentence
-                else:
-                    num_sentence = self.numSentence[d]
-                    for m in range(num_sentence):
-                        t = self.topics[(d, m)]
-                        s = self.sentiments[(d, m)]
-                        self.ns_d[d] -= 1
-                        self.ns_dkl[d, t, s] -= 1
-                        self.ns_dk[d, t] -= 1
-                        for i, w in enumerate(word_indices(self.doc_sent_word_dict[d], m)):
-                            self.n_wkl[w, t, s] -= 1  # w번째 단어가 topic은 t, sentiment s로 할당된 개수
-                            self.n_kl[t, s] -= 1  # topic k, senti l로 할당된 단어 수
+                for m in range(self.numSentence[d]):
+                    t = self.topics[(d, m)]
+                    s = self.sentiments[(d, m)]
+                    self.ns_d[d] -= 1
+                    self.ns_dkl[d, t, s] -= 1
+                    self.ns_dk[d, t] -= 1
+                    for i, w in enumerate(word_indices(self.doc_sent_word_dict[d], m)):
+                        self.n_wkl[w, t, s] -= 1  # w번째 단어가 topic은 t, sentiment s로 할당된 개수
+                        self.n_kl[t, s] -= 1  # topic k, senti l로 할당된 단어 수
 
-                        probabilities_ts = self.conditionalDistribution(d, m, w)
-                        ind = sampleFromCategorical(probabilities_ts.flatten())
-                        t, s = np.unravel_index(ind, probabilities_ts.shape)
-                        self.ns_d[d] += 1
-                        self.ns_dkl[d, t, s] += 1
-                        self.ns_dk[d, t] += 1
-                        for i, w in enumerate(word_indices(self.doc_sent_word_dict[d], m)):
-                            self.n_wkl[w, t, s] += 1  # w번째 단어가 topic은 t, sentiment s로 할당된 개수
-                            self.n_kl[t, s] += 1  # topic k, senti l로 할당된 단어 수
+                    probabilities_ts = self.conditionalDistribution(d, m, w)
+                    ind = sampleFromCategorical(probabilities_ts.flatten())
+                    t, s = np.unravel_index(ind, probabilities_ts.shape)
+                    self.topics[(d, m)] = t
+                    self.sentiments[(d, m)] = s
+                    self.ns_d[d] += 1
+                    self.ns_dkl[d, t, s] += 1
+                    self.ns_dk[d, t] += 1
+                    for i, w in enumerate(word_indices(self.doc_sent_word_dict[d], m)):
+                        self.n_wkl[w, t, s] += 1  # w번째 단어가 topic은 t, sentiment s로 할당된 개수
+                        self.n_kl[t, s] += 1  # topic k, senti l로 할당된 단어 수
 
 
 data = pd.read_csv("E:/dataset/MasterThesis/elec_df_brand2vec.csv",nrows =1000)
